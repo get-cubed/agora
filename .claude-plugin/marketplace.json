@@ -12,7 +12,7 @@
       "name": "herald",
       "source": {
         "source": "github",
-        "repo": "al3xjohnson/get-cubed"
+        "repo": "get-cubed/herald"
       },
       "description": "Configurable notifications when Claude finishes - TTS, alert sounds, or silent",
       "version": "1.0.0",
