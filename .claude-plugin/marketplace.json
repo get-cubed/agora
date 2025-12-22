@@ -14,10 +14,6 @@
         "source": "github",
         "repo": "get-cubed/herald"
       },
-      "description": "Configurable notifications when Claude finishes - TTS, alert sounds, or silent",
-      "version": "1.0.0",
-      "license": "MIT",
-      "keywords": ["notifications", "alerts", "tts", "text-to-speech", "sounds"],
       "category": "productivity"
     }
   ]
