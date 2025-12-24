@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip version bump commits
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: version-check
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(jq -r '.metadata.version' .claude-plugin/marketplace.json)
+
+          # Get previous version
+          PREV_VERSION=$(git show HEAD~1:.claude-plugin/marketplace.json 2>/dev/null | jq -r '.metadata.version' || echo "")
+
+          if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "Version changed: $PREV_VERSION -> $CURRENT_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $CURRENT_VERSION"
+          fi
+
+      - name: Check if tag exists
+        id: tag-check
+        if: steps.version-check.outputs.changed == 'true'
+        run: |
+          VERSION="${{ steps.version-check.outputs.version }}"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v$VERSION already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        if: steps.version-check.outputs.changed == 'true' && steps.tag-check.outputs.exists == 'false'
+        id: release-notes
+        run: |
+          VERSION="${{ steps.version-check.outputs.version }}"
+          PLUGIN_COUNT=$(jq '.plugins | length' .claude-plugin/marketplace.json)
+
+          # Build release notes
+          NOTES="## Agora Marketplace v$VERSION
+
+          ### Plugins ($PLUGIN_COUNT total)
+          "
+
+          for i in $(seq 0 $((PLUGIN_COUNT - 1))); do
+            PLUGIN_NAME=$(jq -r ".plugins[$i].name" .claude-plugin/marketplace.json)
+            PLUGIN_REPO=$(jq -r ".plugins[$i].source.repo" .claude-plugin/marketplace.json)
+            PLUGIN_CAT=$(jq -r ".plugins[$i].category // \"uncategorized\"" .claude-plugin/marketplace.json)
+            NOTES="$NOTES
+          - **$PLUGIN_NAME** - [$PLUGIN_REPO](https://github.com/$PLUGIN_REPO) ($PLUGIN_CAT)"
+          done
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.version-check.outputs.changed == 'true' && steps.tag-check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version-check.outputs.version }}
+          name: Agora v${{ steps.version-check.outputs.version }}
+          body: ${{ steps.release-notes.outputs.notes }}
+          generate_release_notes: false

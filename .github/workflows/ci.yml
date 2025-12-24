@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Marketplace
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JSON
+        run: |
+          echo "Validating marketplace.json..."
+          if ! jq empty .claude-plugin/marketplace.json 2>/dev/null; then
+            echo "❌ Invalid JSON in marketplace.json"
+            exit 1
+          fi
+          echo "✅ marketplace.json is valid JSON"
+
+      - name: Validate marketplace structure
+        run: |
+          echo "Validating marketplace structure..."
+
+          # Check required fields
+          NAME=$(jq -r '.name' .claude-plugin/marketplace.json)
+          OWNER=$(jq -r '.owner.name' .claude-plugin/marketplace.json)
+          PLUGINS=$(jq -r '.plugins' .claude-plugin/marketplace.json)
+
+          if [ "$NAME" = "null" ] || [ -z "$NAME" ]; then
+            echo "❌ Missing 'name' field"
+            exit 1
+          fi
+
+          if [ "$OWNER" = "null" ] || [ -z "$OWNER" ]; then
+            echo "❌ Missing 'owner.name' field"
+            exit 1
+          fi
+
+          if [ "$PLUGINS" = "null" ]; then
+            echo "❌ Missing 'plugins' array"
+            exit 1
+          fi
+
+          # Validate each plugin entry
+          PLUGIN_COUNT=$(jq '.plugins | length' .claude-plugin/marketplace.json)
+          echo "Found $PLUGIN_COUNT plugin(s)"
+
+          for i in $(seq 0 $((PLUGIN_COUNT - 1))); do
+            PLUGIN_NAME=$(jq -r ".plugins[$i].name" .claude-plugin/marketplace.json)
+            PLUGIN_SOURCE=$(jq -r ".plugins[$i].source.source" .claude-plugin/marketplace.json)
+            PLUGIN_REPO=$(jq -r ".plugins[$i].source.repo" .claude-plugin/marketplace.json)
+
+            if [ "$PLUGIN_NAME" = "null" ] || [ -z "$PLUGIN_NAME" ]; then
+              echo "❌ Plugin $i: missing 'name'"
+              exit 1
+            fi
+
+            if [ "$PLUGIN_SOURCE" = "null" ] || [ -z "$PLUGIN_SOURCE" ]; then
+              echo "❌ Plugin '$PLUGIN_NAME': missing 'source.source'"
+              exit 1
+            fi
+
+            if [ "$PLUGIN_REPO" = "null" ] || [ -z "$PLUGIN_REPO" ]; then
+              echo "❌ Plugin '$PLUGIN_NAME': missing 'source.repo'"
+              exit 1
+            fi
+
+            echo "  ✅ $PLUGIN_NAME ($PLUGIN_SOURCE: $PLUGIN_REPO)"
+          done
+
+          echo "✅ Marketplace structure is valid"
+
+      - name: Summary
+        run: |
+          echo "## Marketplace Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          NAME=$(jq -r '.name' .claude-plugin/marketplace.json)
+          OWNER=$(jq -r '.owner.name' .claude-plugin/marketplace.json)
+          PLUGIN_COUNT=$(jq '.plugins | length' .claude-plugin/marketplace.json)
+
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Name | $NAME |" >> $GITHUB_STEP_SUMMARY
+          echo "| Owner | $OWNER |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plugins | $PLUGIN_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Plugins" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for i in $(seq 0 $((PLUGIN_COUNT - 1))); do
+            PLUGIN_NAME=$(jq -r ".plugins[$i].name" .claude-plugin/marketplace.json)
+            PLUGIN_REPO=$(jq -r ".plugins[$i].source.repo" .claude-plugin/marketplace.json)
+            PLUGIN_CAT=$(jq -r ".plugins[$i].category // \"uncategorized\"" .claude-plugin/marketplace.json)
+            echo "- **$PLUGIN_NAME** - \`$PLUGIN_REPO\` ($PLUGIN_CAT)" >> $GITHUB_STEP_SUMMARY
+          done
