@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.png" alt="Agora" width="120" />
+  <img src="docs/images/icon.png" alt="Agora" width="120" />
 </p>
 
 <h1 align="center">Agora</h1>
